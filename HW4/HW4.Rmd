@@ -1,0 +1,195 @@
+---
+title: "HW4_SVM_xz2735"
+author: "Xiaofan Zhang(xz2735)"
+date: "3/23/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#setwd("./Desktop/Statistical-machine-learning//HW4")
+```
+
+### Problem 1
+#### 1.
+$d^2(x,x')=||x-x'||^2_2 = <x-x',x-x'> = \sqrt{(x-x')^T(x-x')} = <x,x>-2<x,x'>+<x',x'>$
+
+#### 2.
+Given $K(x,x') = <\phi(x),\phi(x')>$, the distance is $d^2_k(x,x') = ||\phi(x)-\phi(x')||^2_2 = <\phi(x)-\phi(x'),\phi(x)-\phi(x')> = \sqrt{(\phi(x)-\phi(x'))^T(\phi(x)-\phi(x'))}=<\phi(x),\phi(x)>-2<\phi(x),\phi(x')>+<\phi(x'),\phi(x')> = K(x,x)-2K(x,x')+K(x',x')$
+
+#### 3.
+It calculates the kernel distance between point x and x'.
+
+### Problem 2
+#### 1.
+```{r}
+#Load data
+library(leaps)
+library(tidyverse)
+credit = read.csv("Credit.csv")
+```
+
+
+```{r}
+#Define Dummy variables.
+credit$Gender = ifelse(credit$Gender == "Female",1,0) %>% as.factor
+credit$Student = ifelse(credit$Student == "Yes",1,0) %>% as.factor
+credit$African.American = ifelse(credit$Ethnicity == "African American",1,0) %>% as.factor
+credit$Asian = ifelse(credit$Ethnicity == "Asian",1,0)%>% as.factor
+credit$Married = ifelse(credit$Married == "Yes",1,0)%>% as.factor
+credit = subset(credit,select = -c(X,Ethnicity))
+head(credit)
+```
+
+#### Best subset selection & Forward stepwise selection & Backward stepwise selection
+```{r}
+fit.best = regsubsets(Balance~.,nbest = 1, data = credit, method="exhaustive")
+fit.fwd = regsubsets(Balance~.,data = credit,method="forward")
+fit.bwd = regsubsets(Balance~.,data = credit, method = "backward")
+sum.best = summary(fit.best)
+sum.fwd = summary(fit.fwd)
+sum.bwd = summary(fit.bwd)
+```
+
+```{r}
+library(ggplot2)
+library(reshape)
+rss = cbind(sum.best$rss,sum.fwd$rss,sum.bwd$rss) %>% melt
+rss$X2 = recode(factor(rss$X2),'1'="best subset selection",'2'="forward stepwise selection",'3'="backward stepwise selection") %>% as.factor
+ggplot(data=rss, aes(x=X1,y=value,color=X2))+
+  geom_line()+
+  ggtitle("RSS")+
+  xlab("Number of variables")+
+  ylab("RSS")
+
+```
+
+#### 2.
+#### Best subset selection
+```{r}
+bic.min.best = which.min(sum.best$bic)
+cp.min.best = which.min(sum.best$cp)
+print(bic.min.best )
+print(cp.min.best)
+sum.best
+```
+
+So for BIC, the optimal best subset model has 4 variables such that income, limit, cards, student.
+So for cp, the optimal best subset model has 6 variables such that income, limit, rating, cards, age student.
+
+####  Forward stepwise selection
+```{r}
+bic.min.fwd = which.min(sum.fwd$bic)
+cp.min.fwd = which.min(sum.fwd$cp)
+bic.min.fwd
+cp.min.fwd
+sum.fwd
+```
+
+So for BIC, the optimal forward stepwise model has 5 variables such that income, limit, rating, cards, student.
+So for cp, the optimal forward stepwise model has 6 variables such that income, limit, rating, cards, age student.
+
+#### Backward stepwise selection
+```{r}
+bic.min.bwd = which.min(sum.bwd$bic)
+cp.min.bwd = which.min(sum.bwd$cp)
+bic.min.bwd 
+cp.min.bwd
+sum.bwd
+```
+
+
+So for BIC, the optimal backward stepwise model has 4 variables such that income, limit,  cards, student.
+So for cp, the optimal backward stepwise model has 6 variables such that income, limit, rating, cards, age student.
+
+### Problem 3
+#### 1.
+#####Load data and split the dataset
+```{r}
+#Load data
+df1 = read.csv("train.5-1.txt")
+colnames(df1) = 1:256
+df2 = read.csv("train.6.txt") 
+colnames(df2) = 1:256
+df = rbind(df1,df2) 
+y = as.factor(c(rep(-1, dim(df1)[1]),rep(1,dim(df2)[1])))
+
+#Spilt data into train and test set
+set.seed(123)
+index = 1:nrow(df)
+index = sample(index,size = floor(0.2*nrow(df)),replace = FALSE)
+x.train = df[-index,]
+y.train = y[-index]
+x.test = df[index,]
+y.test = y[index]
+train = cbind(x.train,y.train)
+```
+
+
+#### (a)
+```{r}
+#linear SVM with soft margin
+library(e1071)
+library(rpart)
+cost = seq(0.01,1,0.01)
+j=1
+mis.rate=NULL
+#Cross valiate andtuning parameter. 
+for(i in cost){
+  svm.fit <- svm(y.train ~., train, type = "C-classification", kernel = "linear", cost= i,cross =    10, scale=FALSE)
+  mis.rate[j] = (100- svm.fit$tot.accuracy)/100
+  j = j+1
+}
+optimal.cost = cost[order(min(mis.rate))]
+svm.linear =  svm(y.train ~., train, type = "C-classification", kernel = "linear", cost= optimal.cost , scale=FALSE)
+print(optimal.cost)
+```
+
+#####plot cost and misclassification rate
+```{r}
+plot(cost,mis.rate,type="l",main="misclassfication vs cost",ylab = "misclassification rate")
+```
+
+```{r}
+#Compute test error of linear svm
+y_pred1 = predict(svm.linear,x.test)
+test.error1 = mean(y.test!=y_pred1)
+test.error1
+```
+The best cost is 0.01.
+
+####(b)
+##### train rbf svm and tuning parameters such as cost and gamma(binwidth).
+```{r,results='hide', message=FALSE, warning=FALSE}
+set.seed(1)
+tune.out.rbf <- tune(svm, y.train ~., data=train, 
+                 kernel='radial', 
+                 ranges = list(cost=c(0.1,0.5,1,1.5,2),
+                 gamma=c(0.0001,0.001,0.01,0.1)))
+tune.out.rbf
+```
+
+The optimal cost is 2, optimal gamma is 0.01.
+
+
+#####plot heatmap about cost, gamma and misclassification rate
+```{r}
+plot(tune.out.rbf)
+```
+
+```{r}
+#Compute test error of rbf svm
+y_pred2 = predict(tune.out.rbf$best.model,x.test)
+test.error2 = mean(y_pred2 != y.test)
+test.error2
+```
+
+##### summary of both models
+```{r}
+test.error = data.frame(linear.svm = test.error1, rbf.svm = test.error2)
+test.error
+```
+
+According to the misclassification rate, test error of linear svm is 0.02469136, whereas test error of rbf svm is 0.008230453 rbf svm is better.
